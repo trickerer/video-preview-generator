@@ -58,7 +58,7 @@ function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filenam
     $fbrt = "Bitrate\: " + $bitrate                        #Bitrate\: 8962 kb/s
     $fres = "Resolution\: " + $resolution                  #Resolution\: 1280x960
 
-    $dtfsize1 = [Math]::Max([Int]($fwidth) / 20, 10)
+    $dtfsize1 = [Math]::Max([Int]($(if ($horizontal -eq $true) {$fwidth} else {$fwidth * 2})) / 20, 10)
     $dtfsize2 = [Math]::Max([Math]::Floor($preview_w / 100), 10)
     $padsize = [Math]::Floor($dtfsize2 * 6)
 
