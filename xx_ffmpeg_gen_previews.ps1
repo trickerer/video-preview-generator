@@ -145,9 +145,11 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
         $h_str = ($output -match "^height=.+$")[0].Split('=')[1]
         $cw_str = ($output -match "^coded_width=.+$")[0].Split('=')[1]
         $ch_str = ($output -match "^coded_height=.+$")[0].Split('=')[1]
-        $durbr_str = ($output[$output.Length-1].ToString().Split("`n") -match "^  Duration: .+$")[0]
-        $durbr_str = if ($durbr_str) {$durbr_str} else {($output[$output.Length-2].ToString().Split("`n") -match "^  Duration: .+$")[0]}
-        $durbr_str = if ($durbr_str) {$durbr_str} else {($output[$output.Length-3].ToString().Split("`n") -match "^  Duration: .+$")[0]}
+        $durbr_str = $null
+        $i = $output.Length-1;
+        do {
+            $durbr_str = ($output[$i--].ToString().Split("`n") -match "^  Duration: .+$")[0]
+        } while ($durbr_str -eq $null -and $i -ge 0)
         $dur_str = $durbr_str.Substring([String]("  Duration: ").Length, [String]("00:00:00.00").Length - 3)
         $br_str = $durbr_str.Substring($durbr_str.IndexOf("bitrate: ") + [String]("bitrate: ").Length)
         $width = if ($w_str -match "^\d+$") {[Int]($w_str)} elseif ($cw_str -match "^\d+$") {[Int]($cw_str)} else {0}
@@ -180,7 +182,7 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
             advance = $rem.ToString()
         }
         $params = get_ffmpeg_params @pars
-        write("Generating preview for '" + $src_short + "'...")
+        write('[' + (Get-Date -Format $TimeFormat) + "] Generating preview for '" + $src_short + "'...")
         #write($params)
         if ([IO.Directory]::Exists($destdir) -ne $true)
         {
@@ -313,7 +315,7 @@ while ($true)
     }
     else
     {
-        write("Unknown arg type: '" + $str + "'")
+        Write-Error("Unknown arg type: '" + $str + "'")
         return
     }
     ++$i
