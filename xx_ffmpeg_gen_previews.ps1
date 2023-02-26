@@ -75,6 +75,11 @@ function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filenam
     $Params.Add('-loglevel') > $null
     $Params.Add('error') > $null
     $Params.Add('-noautorotate') > $null
+    if ($threads -ne 0)
+    {
+        $Params.Add('-threads') > $null
+        $Params.Add($threads) > $null
+    }
     $Params.Add('-i') > $null
     $Params.Add(($basefile.FullName -replace '\\', '/')) > $null
     $Params.Add('-an') > $null
@@ -86,8 +91,6 @@ function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filenam
     $Params.Add('0') > $null
     $Params.Add('-flags') > $null
     $Params.Add('+bitexact') > $null
-    $Params.Add('-threads') > $null
-    $Params.Add($threads) > $null
     $Params.Add('-vf') > $null
     $Params.Add(
         "select='not(mod(n-$advance\,$frames))'," +
@@ -233,7 +236,7 @@ function print_help{
           "    --clear          `t`tRemove all previews and 'preview' folders`n" +
           "    --any            `t`tTraverse all folders not checking names`n" +
           "    --report-existing`t`tPrint a message if preview already exists`n" +
-          "    --threads INT    `t`tSet threads number to use. Default is 3`n" +
+          "    --threads INT    `t`tSet decode threads parameter. Default is auto`n" +
           "    --width, -w INT  `t`tSet preview width. Required`n")
 }
 
@@ -243,7 +246,7 @@ $proc_path = $MYWORKDIR
 $clear_mode = $false
 $any_mode = $false
 $report_existing = $false
-$threads = 3
+$threads = 0
 $preview_w = 0
 
 $sleep_time = 0
@@ -280,7 +283,7 @@ while ($true)
             return
         }
         $threads = [Int]($str2)
-        write("[CFG] using $threads threads")
+        write("[CFG] using $threads decode threads")
         $sleep_time = [Math]::Max($sleep_time, 1)
     }
     elseif ($str -eq '--width' -or $str -eq '-w')
