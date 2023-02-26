@@ -37,28 +37,37 @@ $FPI_DEFAULT = "45"
 $PAT0 = "^[01][0-9]{3}$"
 $PAT1 = "^[0-9]{1,2}[a-z]{1,4}$"
 
+$PREVIEW_W_MIN = 640
+$PREVIEW_W_MAX = 1920
 $DRAWTEXT_ALPHA = "0.65"
-$SCALE_WIDTH = "382"
-$SCALE_WIDTH_ROTATED = "190"
 $BGCOLOR = "0x222222A0"
 $DT_FONT = "'C\:/Windows/Fonts/l_10646.ttf'" #Lucida Sans Unicode
-$DT_FSIZE = ([Int]([Math]::Max([Int]($SCALE_WIDTH) / 20, 10))).ToString()
-$DT_FSIZE_A = "18"
 $TILE_W_INT = 5
 $TILE_H_INT = 4
-$TILE_DIMS = $TILE_W_INT.ToString() + "x" + $TILE_H_INT.ToString()
-$TILE_DIMS_ROTATED = ([Int]($TILE_W_INT * 2)).ToString() + "x" + ([Int]($TILE_H_INT / 2)).ToString()
+$TILE_DIMS = '' + $TILE_W_INT + 'x' + $TILE_H_INT
+$TILE_DIMS_ROTATED = '' + $TILE_W_INT * 2 + 'x' + [Math]::Floor($TILE_H_INT / 2)
 
 #functions
 function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filename, [String]$frames, [Boolean]$horizontal,
                                    [String]$filesize, [String]$duration, [String]$bitrate, [String]$resolution, [String]$advance)
 
-    $fwidth = if ($horizontal -eq $true) {$SCALE_WIDTH} else {$SCALE_WIDTH_ROTATED}
+    $fwidth = if ($horizontal -eq $true) {[Math]::Ceiling($preview_w / $TILE_W_INT)} else {[Math]::Ceiling(($preview_w / $TILE_W_INT) / 2)}
     $fdims = if ($horizontal -eq $true) {$TILE_DIMS} else {$TILE_DIMS_ROTATED}
     $fsiz = "File Size\: " + $filesize                     #File Size\: 5.5 MB (5 444 441 bytes)
     $fdur = "Duration\: " + ($duration -replace ":", "\:") #Duration\: 00\:00\:00
-    $fbr = "Bitrate\: " + $bitrate                         #Bitrate\: 8962 kb/s
+    $fbrt = "Bitrate\: " + $bitrate                        #Bitrate\: 8962 kb/s
     $fres = "Resolution\: " + $resolution                  #Resolution\: 1280x960
+
+    $dtfsize1 = [Math]::Max([Int]($fwidth) / 20, 10)
+    $dtfsize2 = [Math]::Max([Math]::Floor($preview_w / 100), 10)
+    $padsize = [Math]::Floor($dtfsize2 * 6)
+
+    $dtpadsize = $dtfsize2  # up and down
+    $ty1 = $dtpadsize
+    $ty2 = $ty1 + $dtpadsize + 1
+    $ty3 = $ty2 + $dtpadsize + 1
+    $ty4 = $ty3 + $dtpadsize + 1
+    $tx = [Math]::Floor($dtfsize2 * 0.75)
 
     $Params = New-Object Collections.ArrayList
     $Params.Add("-hide_banner") > $null
@@ -83,14 +92,15 @@ function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filenam
     $Params.Add(
         "select='not(mod(n-" + $advance + "\," + $frames + "))'," +
         "scale=w=" + $fwidth + ":h=-1," +
-        "drawtext=fontsize=" + $DT_FSIZE + ":fontfile=" + $DT_FONT + ":x=0:y=h-lh-lh/2:fontcolor=white:text='%{pts\:hms\}'" +
+        "drawtext=fontsize=" + $dtfsize1 + ":fontfile=" + $DT_FONT + ":x=0:y=h-lh-lh/2:fontcolor=white:text='%{pts\:hms\}'" +
          ":alpha=" + $DRAWTEXT_ALPHA + ":borderw=2:bordercolor=0x000000A0," +
         "tile=" + $fdims + ":padding=2:margin=1:color=" + $BGCOLOR + "," +
-        "pad=h=ih+100:w=iw:y=oh-ih:color=" + $BGCOLOR + ":eval=init," +
-        "drawtext=fontsize=" + $DT_FSIZE_A + ":fontfile=" + $DT_FONT + ":x=10:y=lh:fontcolor=white:text='" + $fsiz + "'," +
-        "drawtext=fontsize=" + $DT_FSIZE_A + ":fontfile=" + $DT_FONT + ":x=10:y=lh*2.5-1:fontcolor=white:text='" + $fres + "'," +
-        "drawtext=fontsize=" + $DT_FSIZE_A + ":fontfile=" + $DT_FONT + ":x=10:y=lh*3:fontcolor=white:text='" + $fbr + "'," +
-        "drawtext=fontsize=" + $DT_FSIZE_A + ":fontfile=" + $DT_FONT + ":x=10:y=lh*5+4:fontcolor=white:text='" + $fdur + "'"
+        "pad=h=ih+" + $padsize + ":w=iw+" + ($fwidth -band 1) + ":y=oh-ih:color=" + $BGCOLOR + ":eval=init," +
+        "drawtext=fontsize=" + $dtfsize2 + ":fontfile=" + $DT_FONT + ":x=" + $tx + ":y=" + $ty1 + ":fontcolor=white:text='" + $fsiz + "'," +
+        "drawtext=fontsize=" + $dtfsize2 + ":fontfile=" + $DT_FONT + ":x=" + $tx + ":y=" + $ty2 + ":fontcolor=white:text='" + $fres + "'," +
+        "drawtext=fontsize=" + $dtfsize2 + ":fontfile=" + $DT_FONT + ":x=" + $tx + ":y=" + $ty3 + ":fontcolor=white:text='" + $fbrt + "'," +
+        "drawtext=fontsize=" + $dtfsize2 + ":fontfile=" + $DT_FONT + ":x=" + $tx + ":y=" + $ty4 + ":fontcolor=white:text='" + $fdur + "'," +
+        "scale=w=" + $preview_w + ":h=-1"
     ) > $null
     $Params.Add($dest_filename) > $null
     return $Params
@@ -99,7 +109,7 @@ function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filenam
 function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
     $ext = $file.Extension
     $size = $file.Length
-    $filesize = [Math]::Round($size / 1mb, 2).ToString() + " MB (" + $size.ToString("N0") + " bytes)"
+    $filesize = "" + [Math]::Round($size / 1mb, 2) + " MB (" + $size.ToString("N0") + " bytes)"
     if ($ext -match "^\.(?:mp4|webm)$")
     {
         $file_name_short = ($file.BaseName -replace "^(?<fname>(?:.._)?(?=[0-9]+)[^_]+)_.+?$", '${fname}') + $ext
@@ -137,6 +147,7 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
         $ch_str = ($output -match "^coded_height=.+$")[0].Split('=')[1]
         $durbr_str = ($output[$output.Length-1].ToString().Split("`n") -match "^  Duration: .+$")[0]
         $durbr_str = if ($durbr_str) {$durbr_str} else {($output[$output.Length-2].ToString().Split("`n") -match "^  Duration: .+$")[0]}
+        $durbr_str = if ($durbr_str) {$durbr_str} else {($output[$output.Length-3].ToString().Split("`n") -match "^  Duration: .+$")[0]}
         $dur_str = $durbr_str.Substring([String]("  Duration: ").Length, [String]("00:00:00.00").Length - 3)
         $br_str = $durbr_str.Substring($durbr_str.IndexOf("bitrate: ") + [String]("bitrate: ").Length)
         $width = if ($w_str -match "^\d+$") {[Int]($w_str)} elseif ($cw_str -match "^\d+$") {[Int]($cw_str)} else {0}
@@ -205,6 +216,8 @@ function process_folder{ Param ([IO.DirectoryInfo]$folder, [Int]$level)
             }
             return
         }
+        if ($any_mode -ne $true -and $level -lt 1)
+        { return }
         $folder.GetFiles() | ForEach-Object {
             process_file -file $_ -destdir $dest_folder_name
         }
@@ -213,12 +226,13 @@ function process_folder{ Param ([IO.DirectoryInfo]$folder, [Int]$level)
 
 function print_help{
     write(" Recursive traversal video preview generator for .mp4 and .webm files`n" +
-          "  Syntax: " + $script:MyInvocation.MyCommand.Name + " [--help] [options...] --path #PATH`n`n" +
+          "  Syntax: " + $script:MyInvocation.MyCommand.Name + " [--help] [options...] --width #WIDTH --path #PATH`n`n" +
           "   Options:`n" +
           "    --clear          `t`tRemove all previews and 'preview' folders`n" +
           "    --any            `t`tTraverse all folders not checking names`n" +
           "    --report-existing`t`tPrint a message if preview already exists`n" +
-          "    --threads INT    `t`tSet threads number to use. Default is 3`n")
+          "    --threads INT    `t`tSet threads number to use. Default is 3`n" +
+          "    --width, -w INT  `t`tSet preview width. Required`n")
 }
 
 #INIT
@@ -228,6 +242,7 @@ $clear_mode = $false
 $any_mode = $false
 $report_existing = $false
 $threads = 3
+$preview_w = 0
 
 $sleep_time = 0
 
@@ -259,11 +274,24 @@ while ($true)
         ++$i
         if ($str2 -notmatch "^\d+$")
         {
-            write("Invalid value for " + $str + ": '" + $str2 + "'")
+            Write-Error("Invalid value for " + $str + ": '" + $str2 + "'")
             return
         }
         $threads = [Int]($str2)
         write("[CFG] using $threads threads")
+        $sleep_time = [Math]::Max($sleep_time, 1)
+    }
+    elseif ($str -eq "--width" -or $str -eq "-w")
+    {
+        $str2 = $args[$i+1]
+        ++$i
+        if ($str2 -notmatch "^\d+$")
+        {
+            Write-Error("Invalid value for " + $str + ": '" + $str2 + "'")
+            return
+        }
+        $preview_w = [Int]($str2)
+        write("[CFG] using preview width $preview_w")
         $sleep_time = [Math]::Max($sleep_time, 1)
     }
     elseif ($str -eq "--clear")
@@ -291,16 +319,45 @@ while ($true)
     ++$i
 }
 
+#final checks
 if ([IO.Directory]::Exists($proc_path) -ne $true)
 {
     write("Invalid path: '" + $proc_path + "'")
     return
 }
 
+if ($clear_mode -ne $true)
+{
+    if ($preview_w -eq 0)
+    {
+        print_help
+        Write-Error("Error: width is not set!")
+        return
+    }
+    elseif ($preview_w -lt $PREVIEW_W_MIN)
+    {
+        print_help
+        Write-Error("Error: min preview width is $PREVIEW_W_MIN!")
+        return
+    }
+    elseif ($preview_w -gt $PREVIEW_W_MAX)
+    {
+        print_help
+        Write-Error("Error: max preview width is $PREVIEW_W_MAX!")
+        return
+    }
+    #elseif ($preview_w -band 1)
+    #{
+    #    print_help
+    #    Write-Error("Error: preview width value must be even!")
+    #    return
+    #}
+}
+
 $path_info = Get-ItemProperty $proc_path
 if ($path_info.GetType() -ne [IO.DirectoryInfo])
 {
-    write("ERROR: selected path is not a directory!")
+    Write-Error("ERROR: selected path is not a directory!")
     return
 }
 
