@@ -16,16 +16,6 @@
 
 . "config.ps1"
 
-#ffmpeg.exe -hide_banner -y -loglevel info -noautorotate -i 1.mp4 -an -frames:v 1 -q:v 5 -fps_mode vfr -flags +bitexact -threads 3
-# -filter_complex "select='not(mod(n\,61))',scale=w=317:h=-1,
-#drawtext=fontsize=19:fontfile='C\:/Windows/Fonts/l_10646.ttf':text='%{pts\:hms\}':x=0:y=h-lh-lh/2
-# :fontcolor=white:alpha=0.65:borderw=2:bordercolor=0x000000B0,tile=4x3:padding=4:margin=0:color=0x222222A0,
-#pad=h=ih+100:w=iw:y=oh-ih:color=0x222222A0:eval=init,
-#drawtext=fontsize=18:fontfile='C\:/Windows/Fonts/l_10646.ttf':text='Resolution\: 1280x960':x=10:y=lh:fontcolor=white,
-#drawtext=fontsize=18:fontfile='C\:/Windows/Fonts/l_10646.ttf':text='Bitrate\: 8962 kb/s':x=10:y=lh*2-1:fontcolor=white,
-#drawtext=fontsize=18:fontfile='C\:/Windows/Fonts/l_10646.ttf':text='File Size\: 5.5 MB (5 444 441 bytes)':x=10:y=lh*3:fontcolor=white,
-#drawtext=fontsize=18:fontfile='C\:/Windows/Fonts/l_10646.ttf':text='Duration\: 00\:00\:00':x=10:y=lh*5+4:fontcolor=white" prev.jpg
-
 #imports
 $MYWORKDIR = $MYWORKDIR_DWNLD
 $MYFFPROBE = $RUN_FFPROBE
@@ -44,19 +34,88 @@ $BGCOLOR = '0x222222A0'
 $DT_FONT = '''C\:/Windows/Fonts/l_10646.ttf''' #Lucida Sans Unicode
 $TILE_W_INT = 5
 $TILE_H_INT = 4
+$TILES_COUNT = $TILE_W_INT * $TILE_H_INT
 $TILE_DIMS = '' + "$TILE_W_INT`x$TILE_H_INT"
 $TILE_DIMS_ROTATED = "$($TILE_W_INT * 2)x$([Math]::Floor($TILE_H_INT / 2))"
 
 #functions
-function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filename, [String]$frames, [Boolean]$horizontal,
-                                   [String]$filesize, [String]$duration, [String]$bitrate, [String]$resolution, [String]$advance)
+function get_ffmpeg_params_q{ Param ([IO.FileInfo]$basefile, [String]$dest_filename, [String]$frames, [Double]$secs, [Boolean]$horizontal,
+                                     [String]$filesize, [String]$duration, [String]$bitrate, [String]$resolution, [String]$adv, $sadv)
 
     $fwidth = if ($horizontal -eq $true) {[Math]::Ceiling($preview_w / $TILE_W_INT)} else {[Math]::Ceiling(($preview_w / $TILE_W_INT) / 2)}
     $fdims = if ($horizontal -eq $true) {$TILE_DIMS} else {$TILE_DIMS_ROTATED}
-    $fsiz = 'File Size\: ' + $filesize                     #File Size\: 5.5 MB (5 444 441 bytes)
-    $fdur = 'Duration\: ' + ($duration -replace ':', '\:') #Duration\: 00\:00\:00
-    $fbrt = 'Bitrate\: ' + $bitrate                        #Bitrate\: 8962 kb/s
-    $fres = 'Resolution\: ' + $resolution                  #Resolution\: 1280x960
+    $fsiz = "File Size\: $filesize"                        #File Size\: 5.5 MB (5 444 441 bytes)
+    $fdur = "Duration\: $($duration -replace ':', '\:')"   #Duration\: 00\:00\:00
+    $fbrt = "Bitrate\: $bitrate"                           #Bitrate\: 8962 kb/s
+    $fres = "Resolution\: $resolution`@$fps_str fps"       #Resolution\: 1280x960
+
+    $dtfsize1 = [Math]::Max([Int]($(if ($horizontal -eq $true) {$fwidth} else {$fwidth * 2})) / 20, 10)
+    $dtfsize2 = [Math]::Max([Math]::Floor($preview_w / 100), 10)
+    $padsize = [Math]::Floor($dtfsize2 * 6)
+
+    $dtpadsize = $dtfsize2  # up and down
+    $ty1 = $dtpadsize
+    $ty2 = $ty1 + $dtpadsize + 1
+    $ty3 = $ty2 + $dtpadsize + 1
+    $ty4 = $ty3 + $dtpadsize + 1
+    $tx = [Math]::Floor($dtfsize2 * 0.75)
+
+    $fil="scale=w=$fwidth`:h=-1,drawtext=fontsize=$dtfsize1`:fontfile=$DT_FONT`:x=0:y=h-lh-lh/2:fontcolor=white:text='%{pts\:hms\}'" +
+         ":alpha=$DRAWTEXT_ALPHA`:borderw=2:bordercolor=0x000000A0"
+    $fils = ""
+    for ($i = 0; $i -lt $TILES_COUNT; ++$i) {
+        $fils += "[${i}:v]${fil}[v${i}];"
+    }
+    for ($i = 0; $i -lt $TILES_COUNT; ++$i) {
+        $fils += "[v${i}]"
+    }
+    $fils += "concat=n=$TILES_COUNT`:v=1:a=0[o1];[o1]tile=$fdims`:padding=2:margin=1:color=$BGCOLOR," +
+             "pad=h=ih+$padsize`:w=iw+$($fwidth -band 1)`:y=oh-ih:color=$BGCOLOR`:eval=init,scale=w=$preview_w`:h=-1," +
+             "drawtext=fontsize=$dtfsize2`:fontfile=$DT_FONT`:x=$tx`:y=$ty1`:fontcolor=white:text='$fsiz'," +
+             "drawtext=fontsize=$dtfsize2`:fontfile=$DT_FONT`:x=$tx`:y=$ty2`:fontcolor=white:text='$fres'," +
+             "drawtext=fontsize=$dtfsize2`:fontfile=$DT_FONT`:x=$tx`:y=$ty3`:fontcolor=white:text='$fbrt'," +
+             "drawtext=fontsize=$dtfsize2`:fontfile=$DT_FONT`:x=$tx`:y=$ty4`:fontcolor=white:text='$fdur'"
+
+    $Params = New-Object Collections.ArrayList
+    $Params.Add('-hide_banner') > $null
+    $Params.Add('-y') > $null
+    $Params.Add('-loglevel') > $null
+    $Params.Add('error') > $null
+    $Params.Add('-noautorotate') > $null
+    if ($threads -ne 0)
+    {
+        $Params.Add('-threads') > $null
+        $Params.Add($threads) > $null
+    }
+    for ($i = 0; $i -lt $TILES_COUNT; ++$i) {
+        $Params.Add('-ss') > $null
+        $Params.Add($i * $secs + $sadv) > $null
+        $Params.Add('-t') > $null
+        $Params.Add('0.001') > $null
+        $Params.Add('-i') > $null
+        $Params.Add(($basefile.FullName -replace '\\', '/')) > $null
+    }
+    $Params.Add('-copyts') > $null
+    $Params.Add('-an') > $null
+    $Params.Add('-filter_complex') > $null
+    $Params.Add($fils) > $null
+    $Params.Add('-frames:v') > $null
+    $Params.Add('1') > $null
+    $Params.Add('-q:v') > $null
+    $Params.Add('5') > $null
+    $Params.Add($dest_filename) > $null
+    return $Params
+}
+
+function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filename, [String]$frames, [Double]$secs, [Boolean]$horizontal,
+                                   [String]$filesize, [String]$duration, [String]$bitrate, [String]$resolution, [String]$adv, $sadv)
+
+    $fwidth = if ($horizontal -eq $true) {[Math]::Ceiling($preview_w / $TILE_W_INT)} else {[Math]::Ceiling(($preview_w / $TILE_W_INT) / 2)}
+    $fdims = if ($horizontal -eq $true) {$TILE_DIMS} else {$TILE_DIMS_ROTATED}
+    $fsiz = "File Size\: $filesize"                        #File Size\: 5.5 MB (5 444 441 bytes)
+    $fdur = "Duration\: $($duration -replace ':', '\:')"   #Duration\: 00\:00\:00
+    $fbrt = "Bitrate\: $bitrate"                           #Bitrate\: 8962 kb/s
+    $fres = "Resolution\: $resolution`@$fps_str fps"       #Resolution\: 1280x960
 
     $dtfsize1 = [Math]::Max([Int]($(if ($horizontal -eq $true) {$fwidth} else {$fwidth * 2})) / 20, 10)
     $dtfsize2 = [Math]::Max([Math]::Floor($preview_w / 100), 10)
@@ -93,7 +152,7 @@ function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filenam
     $Params.Add('+bitexact') > $null
     $Params.Add('-vf') > $null
     $Params.Add(
-        "select='not(mod(n-$advance\,$frames))'," +
+        "select='not(mod(n-$adv\,$frames))'," +
         "scale=w=$fwidth`:h=-1," +
         "drawtext=fontsize=$dtfsize1`:fontfile=$DT_FONT`:x=0:y=h-lh-lh/2:fontcolor=white:text='%{pts\:hms\}'" +
          ":alpha=$DRAWTEXT_ALPHA`:borderw=2:bordercolor=0x000000A0," +
@@ -153,38 +212,50 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
         do {
             $durbr_str = ($output[$i--].ToString().Split("`n") -match '^  Duration: .+$')[0]
         } while ($durbr_str -eq $null -and $i -ge 0)
+        $stream_str = $null
+        $i = $output.Length-1;
+        do {
+            $stream_str = ($output[$i--].ToString().Split("`n") -match '^  Stream .+Video: .+$')[0]
+        } while ($stream_str -eq $null -and $i -ge 0)
         $dur_str = $durbr_str.Substring([String]('  Duration: ').Length, [String]('00:00:00.00').Length - 3)
         $br_str = $durbr_str.Substring($durbr_str.IndexOf('bitrate: ') + [String]('bitrate: ').Length)
+        $fps_str =($stream_str | Select-String ', ([0-9.]+) fps,').Matches[0].Groups[1].Value
+        $fps = [Double]$fps_str
         $width = if ($w_str -match '^\d+$') {[Int]($w_str)} elseif ($cw_str -match '^\d+$') {[Int]($cw_str)} else {0}
         $height = if ($h_str -match '^\d+$') {[Int]($h_str)} elseif ($ch_str -match '^\d+$') {[Int]($ch_str)} else {0}
         $nb_frames_str = if ($nb_frames_str -match '^\d+$') {$nb_frames_str} else {$nb_packets_str}
         if ($nb_frames_str -notmatch '^\d+$')
         {
             write("WARNING: Unable to get fpi ($src_short)! Falling back to $FPI_DEFAULT!")
-            $nb_frames_str = ($FPI_DEFAULT * ($TILE_W_INT * $TILE_H_INT - 1)).ToString()
+            $nb_frames_str = ($FPI_DEFAULT * ($TILES_COUNT - 1)).ToString()
         }
         $nb_frames = [Int]($nb_frames_str)
-        #2. calculate number of frames per image
-        #3. calculate a half of remaining frames < fpi to adjust seek
+        #2. calculate number of frames and time per image
+        #3. calculate a half of remaining frames < fpi / time < spi to adjust seek
         #   so first and last screens have offsets rem/2 and nbf-rem/2 instead of 0 and nbf-rem
         $rem0 = $null
-        $fpi = [Math]::DivRem($nb_frames, ($TILE_W_INT * $TILE_H_INT - 1), [Ref]$rem0)
-        $fpi = if ($fpi -le 1) {1} elseif ($nb_frames % $fpi -eq 0) {$fpi - 1} else {$fpi}
+        $fpi = [Math]::DivRem($nb_frames, $TILES_COUNT - 1, [Ref]$rem0)
+        $fpi = if ($fpi -le 1) {1} elseif ($rem0 -eq 0) {$fpi - 1} else {$fpi}
+        $spi = $fpi / ($fps + 0.001)  # friggin' PS rounding kills me
         $rem = [Math]::Floor($rem0 / 2)
+        $srem = if ($rem -eq 0) {0.0} else {($rem0 / 2) / $fps}
         #4. create preview directory in current folder
         #5. run ffmpeg with calculated params to generate preview
         $pars = @{
             basefile = $file
             dest_filename = $dest_file_name
             frames = $fpi.ToString()
+            secs = $spi
             horizontal = $width -ge $height
             filesize = $filesize
             duration = $dur_str
             bitrate = $br_str
             resolution = '{0:d}x{1:d}' -f $width, $height
-            advance = $rem.ToString()
+            adv = $rem
+            sadv = $srem
+            fps = $fps_str
         }
-        $params = get_ffmpeg_params @pars
+        $params = if ($file.Length -lt 30mb) {get_ffmpeg_params @pars} else {get_ffmpeg_params_q @pars}
         write("[$(Get-Date -Format $TimeFormat)] Generating preview for '$src_short'...")
         #write($params)
         if ([IO.Directory]::Exists($destdir) -ne $true)
