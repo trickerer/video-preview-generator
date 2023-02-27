@@ -38,6 +38,10 @@ $TILES_COUNT = $TILE_W_INT * $TILE_H_INT
 $TILE_DIMS = '' + "$TILE_W_INT`x$TILE_H_INT"
 $TILE_DIMS_ROTATED = "$($TILE_W_INT * 2)x$([Math]::Floor($TILE_H_INT / 2))"
 
+$SEEK_MODE_AUTO = 0
+$SEEK_MODE_FULL = 1
+$SEEK_MODE_FAST = 2
+
 #functions
 function get_ffmpeg_params_q{ Param ([IO.FileInfo]$basefile, [String]$dest_filename, [String]$frames, [Double]$secs, [Boolean]$horizontal,
                                      [String]$filesize, [String]$duration, [String]$bitrate, [String]$resolution, [String]$adv, $sadv)
@@ -250,12 +254,16 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
             filesize = $filesize
             duration = $dur_str
             bitrate = $br_str
-            resolution = '{0:d}x{1:d}' -f $width, $height
+            resolution = "$width`x$height"
             adv = $rem
             sadv = $srem
             fps = $fps_str
         }
-        $params = if ($file.Length -lt 30mb) {get_ffmpeg_params @pars} else {get_ffmpeg_params_q @pars}
+        if ($seek_mode -eq $SEEK_MODE_FULL)
+        { $params = get_ffmpeg_params @pars}
+        elseif ($seek_mode -eq $SEEK_MODE_FAST)
+        { $params = get_ffmpeg_params_q @pars}
+        else { $params = if ($file.Length -lt 30mb) {get_ffmpeg_params @pars} else {get_ffmpeg_params_q @pars} }
         write("[$(Get-Date -Format $TimeFormat)] Generating preview for '$src_short'...")
         #write($params)
         if ([IO.Directory]::Exists($destdir) -ne $true)
@@ -302,13 +310,14 @@ function process_folder{ Param ([IO.DirectoryInfo]$folder, [Int]$level)
 
 function print_help{
     write(" Recursive traversal video preview generator for .mp4 and .webm files`n" +
-          "  Syntax: " + $script:MyInvocation.MyCommand.Name + " [--help] [options...] --width #WIDTH --path #PATH`n`n" +
+          "  Syntax: $($script:MyInvocation.MyCommand.Name) [--help] [--clear] [options...] --width #WIDTH --path #PATH`n`n" +
           "   Options:`n" +
-          "    --clear          `t`tRemove all previews and 'preview' folders`n" +
-          "    --any            `t`tTraverse all folders not checking names`n" +
-          "    --report-existing`t`tPrint a message if preview already exists`n" +
-          "    --threads INT    `t`tSet decode threads parameter. Default is auto`n" +
-          "    --width, -w INT  `t`tSet preview width. Required`n")
+          "    --clear                 `tRemove all previews and 'preview' folders`n" +
+          "    --any                   `tTraverse all folders not checking names`n" +
+          "    --report-existing       `tPrint a message if preview already exists`n" +
+          "    --threads INT           `tSet decode threads parameter. Default is auto`n" +
+          "    --width, -w INT         `tSet preview width. Required`n" +
+          "    --force-mode, -m {0,1,2}`tForce seek mode: 0=auto (default), 1=full, 2=fast`n")
 }
 
 #INIT
@@ -319,6 +328,7 @@ $any_mode = $false
 $report_existing = $false
 $threads = 0
 $preview_w = 0
+$seek_mode = $SEEK_MODE_AUTO
 
 $sleep_time = 0
 
@@ -367,7 +377,20 @@ while ($true)
             return
         }
         $preview_w = [Int]($str2)
-        write("[CFG] using preview width $preview_w")
+        write("[CFG] using preview width: $preview_w")
+        $sleep_time = [Math]::Max($sleep_time, 1)
+    }
+    elseif ($str -eq '--force-mode' -or $str -eq '-m')
+    {
+        $str2 = $args[$i+1]
+        ++$i
+        if ($str2 -notmatch '^[012]$')
+        {
+            Write-Error("Invalid value for $str`: '$str2'")
+            return
+        }
+        $seek_mode = [Int]($str2)
+        write("[CFG] using seek mode: $(if ($seek_mode -eq 1) {'FULL'} elseif ($seek_mode -eq 2) {'FAST'} else {'AUTO'})")
         $sleep_time = [Math]::Max($sleep_time, 1)
     }
     elseif ($str -eq '--clear')
