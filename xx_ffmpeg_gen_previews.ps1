@@ -33,7 +33,7 @@ $TILE_H_MIN = 2
 $TILE_H_MAX = 4
 
 $PREVIEW_EXT = '.jpg'
-$FPI_DEFAULT = '45'
+$FPI_DEFAULT = 45
 $PAT0 = '^[01][0-9]{3}$'
 $PAT1 = '^[0-9]{1,2}[a-z]{1,4}$'
 
@@ -490,7 +490,7 @@ if ($clear_mode -ne $true)
 }
 
 $path_info = Get-ItemProperty $proc_path
-if ($path_info.GetType() -ne [IO.DirectoryInfo])
+if ($path_info -isnot [IO.DirectoryInfo])
 {
     Write-Error('ERROR: selected path is not a directory!')
     return
