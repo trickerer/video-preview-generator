@@ -22,32 +22,35 @@ $MYFFPROBE = $RUN_FFPROBE
 $MYFFMPEG = $RUN_FFMPEG
 
 #consts
+$SEEK_MODE_AUTO = 0
+$SEEK_MODE_FULL = 1
+$SEEK_MODE_FAST = 2
+$PREVIEW_W_MIN = 640
+$PREVIEW_W_MAX = 1920
+$TILE_W_MIN = 3
+$TILE_W_MAX = 5
+$TILE_H_MIN = 2
+$TILE_H_MAX = 4
+
 $PREVIEW_EXT = '.jpg'
 $FPI_DEFAULT = '45'
 $PAT0 = '^[01][0-9]{3}$'
 $PAT1 = '^[0-9]{1,2}[a-z]{1,4}$'
 
-$PREVIEW_W_MIN = 640
-$PREVIEW_W_MAX = 1920
 $DRAWTEXT_ALPHA = '0.65'
 $BGCOLOR = '0x222222A0'
 $DT_FONT = '''C\:/Windows/Fonts/l_10646.ttf''' #Lucida Sans Unicode
-$TILE_W_INT = 5
-$TILE_H_INT = 4
-$TILES_COUNT = $TILE_W_INT * $TILE_H_INT
-$TILE_DIMS = '' + "$TILE_W_INT`x$TILE_H_INT"
-$TILE_DIMS_ROTATED = "$($TILE_W_INT * 2)x$([Math]::Floor($TILE_H_INT / 2))"
 
-$SEEK_MODE_AUTO = 0
-$SEEK_MODE_FULL = 1
-$SEEK_MODE_FAST = 2
+$WIDTH_DEFAULT = $PREVIEW_W_MAX
+$TILE_W_DEFAULT = $TILE_W_MAX
+$TILE_H_DEFAULT = $TILE_H_MAX
 
 #functions
 function get_ffmpeg_params_q{ Param ([IO.FileInfo]$basefile, [String]$dest_filename, [String]$frames, [Double]$secs, [Boolean]$horizontal,
                                      [String]$filesize, [String]$duration, [String]$bitrate, [String]$resolution, [String]$adv, $sadv)
 
-    $fwidth = if ($horizontal -eq $true) {[Math]::Ceiling($preview_w / $TILE_W_INT)} else {[Math]::Ceiling(($preview_w / $TILE_W_INT) / 2)}
-    $fdims = if ($horizontal -eq $true) {$TILE_DIMS} else {$TILE_DIMS_ROTATED}
+    $fwidth = if ($horizontal -eq $true) {[Math]::Ceiling($preview_w / $tilew)} else {[Math]::Ceiling(($preview_w / $tilew) / 2)}
+    $fdims = if ($horizontal -eq $true) {"$tilew`x$tileh"} else {"$($tilew * 2)x$([Math]::Floor($tileh / 2))"}
     $fsiz = "File Size\: $filesize"                        #File Size\: 5.5 MB (5 444 441 bytes)
     $fdur = "Duration\: $($duration -replace ':', '\:')"   #Duration\: 00\:00\:00
     $fbrt = "Bitrate\: $bitrate"                           #Bitrate\: 8962 kb/s
@@ -67,13 +70,13 @@ function get_ffmpeg_params_q{ Param ([IO.FileInfo]$basefile, [String]$dest_filen
     $fil="scale=w=$fwidth`:h=-1,drawtext=fontsize=$dtfsize1`:fontfile=$DT_FONT`:x=0:y=h-lh-lh/2:fontcolor=white:text='%{pts\:hms\}'" +
          ":alpha=$DRAWTEXT_ALPHA`:borderw=2:bordercolor=0x000000A0"
     $fils = ""
-    for ($i = 0; $i -lt $TILES_COUNT; ++$i) {
+    for ($i = 0; $i -lt $tilew * $tileh; ++$i) {
         $fils += "[${i}:v]${fil}[v${i}];"
     }
-    for ($i = 0; $i -lt $TILES_COUNT; ++$i) {
+    for ($i = 0; $i -lt $tilew * $tileh; ++$i) {
         $fils += "[v${i}]"
     }
-    $fils += "concat=n=$TILES_COUNT`:v=1:a=0[o1];[o1]tile=$fdims`:padding=2:margin=1:color=$BGCOLOR," +
+    $fils += "concat=n=$($tilew * $tileh)`:v=1:a=0[o1];[o1]tile=$fdims`:padding=2:margin=1:color=$BGCOLOR," +
              "pad=h=ih+$padsize`:w=iw+$($fwidth -band 1)`:y=oh-ih:color=$BGCOLOR`:eval=init,scale=w=$preview_w`:h=-1," +
              "drawtext=fontsize=$dtfsize2`:fontfile=$DT_FONT`:x=$tx`:y=$ty1`:fontcolor=white:text='$fsiz'," +
              "drawtext=fontsize=$dtfsize2`:fontfile=$DT_FONT`:x=$tx`:y=$ty2`:fontcolor=white:text='$fres'," +
@@ -91,7 +94,7 @@ function get_ffmpeg_params_q{ Param ([IO.FileInfo]$basefile, [String]$dest_filen
         $Params.Add('-threads') > $null
         $Params.Add($threads) > $null
     }
-    for ($i = 0; $i -lt $TILES_COUNT; ++$i) {
+    for ($i = 0; $i -lt $tilew * $tileh; ++$i) {
         $Params.Add('-ss') > $null
         $Params.Add($i * $secs + $sadv) > $null
         $Params.Add('-t') > $null
@@ -114,8 +117,8 @@ function get_ffmpeg_params_q{ Param ([IO.FileInfo]$basefile, [String]$dest_filen
 function get_ffmpeg_params{ Param ([IO.FileInfo]$basefile, [String]$dest_filename, [String]$frames, [Double]$secs, [Boolean]$horizontal,
                                    [String]$filesize, [String]$duration, [String]$bitrate, [String]$resolution, [String]$adv, $sadv)
 
-    $fwidth = if ($horizontal -eq $true) {[Math]::Ceiling($preview_w / $TILE_W_INT)} else {[Math]::Ceiling(($preview_w / $TILE_W_INT) / 2)}
-    $fdims = if ($horizontal -eq $true) {$TILE_DIMS} else {$TILE_DIMS_ROTATED}
+    $fwidth = if ($horizontal -eq $true) {[Math]::Ceiling($preview_w / $tilew)} else {[Math]::Ceiling(($preview_w / $tilew) / 2)}
+    $fdims = if ($horizontal -eq $true) {"$tilew`x$tileh"} else {"$($tilew * 2)x$([Math]::Floor($tileh / 2))"}
     $fsiz = "File Size\: $filesize"                        #File Size\: 5.5 MB (5 444 441 bytes)
     $fdur = "Duration\: $($duration -replace ':', '\:')"   #Duration\: 00\:00\:00
     $fbrt = "Bitrate\: $bitrate"                           #Bitrate\: 8962 kb/s
@@ -231,14 +234,14 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
         if ($nb_frames_str -notmatch '^\d+$')
         {
             write("WARNING: Unable to get fpi ($src_short)! Falling back to $FPI_DEFAULT!")
-            $nb_frames_str = ($FPI_DEFAULT * ($TILES_COUNT - 1)).ToString()
+            $nb_frames_str = ($FPI_DEFAULT * ($tilew * $tileh - 1)).ToString()
         }
         $nb_frames = [Int]($nb_frames_str)
         #2. calculate number of frames and time per image
         #3. calculate a half of remaining frames < fpi / time < spi to adjust seek
         #   so first and last screens have offsets rem/2 and nbf-rem/2 instead of 0 and nbf-rem
         $rem0 = $null
-        $fpi = [Math]::DivRem($nb_frames, $TILES_COUNT - 1, [Ref]$rem0)
+        $fpi = [Math]::DivRem($nb_frames, $tilew * $tileh - 1, [Ref]$rem0)
         $fpi = if ($fpi -le 1) {1} elseif ($rem0 -eq 0) {$fpi - 1} else {$fpi}
         $spi = $fpi / ($fps + 0.001)  # friggin' PS rounding kills me
         $rem = [Math]::Floor($rem0 / 2)
@@ -310,14 +313,20 @@ function process_folder{ Param ([IO.DirectoryInfo]$folder, [Int]$level)
 
 function print_help{
     write(" Recursive traversal video preview generator for .mp4 and .webm files`n" +
-          "  Syntax: $($script:MyInvocation.MyCommand.Name) [--help] [--clear] [options...] --width #WIDTH --path #PATH`n`n" +
+          "  Syntax: $($script:MyInvocation.MyCommand.Name) [--help] [--clear] [options...] [--path #PATH]`n" +
+          "`n" +
           "   Options:`n" +
-          "    --clear                 `tRemove all previews and 'preview' folders`n" +
+          "    --path PATH             `tPath to target base folder. Default is '$MYWORKDIR_DWNLD'`n" +
+          "`n" +
+          "    --clear                 `tREMOVE all previews and 'preview' folders instead`n" +
           "    --any                   `tTraverse all folders not checking names`n" +
           "    --report-existing       `tPrint a message if preview already exists`n" +
-          "    --threads INT           `tSet decode threads parameter. Default is auto`n" +
-          "    --width, -w INT         `tSet preview width. Required`n" +
-          "    --force-mode, -m {0,1,2}`tForce seek mode: 0=auto (default), 1=full, 2=fast`n")
+          "    --threads INT           `tSet decode threads parameter. Default is 'auto'`n" +
+          "    --width, -w INT         `tSet preview width, $PREVIEW_W_MIN to $PREVIEW_W_MAX. Default is '$WIDTH_DEFAULT'`n" +
+          "    --force-mode, -m {$SEEK_MODE_AUTO,$SEEK_MODE_FULL,$SEEK_MODE_FAST}" +
+           "`tForce seek mode: $SEEK_MODE_AUTO='auto' (default), $SEEK_MODE_FULL='full', $SEEK_MODE_FAST='fast'`n" +
+          "    --tiles-horizontal, -x  `tSet horizontal tiles number, $TILE_W_MIN to $TILE_W_MAX. Default is '$tilew'`n" +
+          "    --tiles-vertical, -y    `tSet vertical tiles number, $TILE_H_MIN to $TILE_H_MAX. Default is '$tileh'`n")
 }
 
 #INIT
@@ -327,13 +336,14 @@ $clear_mode = $false
 $any_mode = $false
 $report_existing = $false
 $threads = 0
-$preview_w = 0
+$preview_w = $WIDTH_DEFAULT
 $seek_mode = $SEEK_MODE_AUTO
+$tilew = $TILE_W_DEFAULT
+$tileh = $TILE_H_DEFAULT
 
 $sleep_time = 0
 
 $i = 0
-$j = 0
 while ($true)
 {
     $str = [String]$args[$i]
@@ -391,6 +401,32 @@ while ($true)
         }
         $seek_mode = [Int]($str2)
         write("[CFG] using seek mode: $(if ($seek_mode -eq 1) {'FULL'} elseif ($seek_mode -eq 2) {'FAST'} else {'AUTO'})")
+        $sleep_time = [Math]::Max($sleep_time, 1)
+    }
+    elseif ($str -eq '--tiles-horizontal' -or $str -eq '-x')
+    {
+        $str2 = $args[$i+1]
+        ++$i
+        if ($str2 -notmatch '^[' + "$TILE_W_MIN-$TILE_W_MAX" + ']$')
+        {
+            Write-Error("Invalid value for $str`: '$str2'")
+            return
+        }
+        $tilew = [Int]($str2)
+        write("[CFG] using horizontal tiles: $tilew")
+        $sleep_time = [Math]::Max($sleep_time, 1)
+    }
+    elseif ($str -eq '--tiles-vertical' -or $str -eq '-y')
+    {
+        $str2 = $args[$i+1]
+        ++$i
+        if ($str2 -notmatch '^[' + "$TILE_H_MIN-$TILE_H_MAX" + ']$')
+        {
+            Write-Error("Invalid value for $str`: '$str2'")
+            return
+        }
+        $tileh = [Int]($str2)
+        write("[CFG] using vertical tiles: $tileh")
         $sleep_time = [Math]::Max($sleep_time, 1)
     }
     elseif ($str -eq '--clear')
