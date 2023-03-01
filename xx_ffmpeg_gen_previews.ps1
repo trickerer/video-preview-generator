@@ -232,6 +232,7 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
             $stream_str = ($output[$i--].ToString().Split("`n") -match '^  Stream .+Video: .+$')[0]
         } while ($stream_str -eq $null -and $i -ge 0)
         $dur_str = $durbr_str.Substring([String]('  Duration: ').Length, [String]('00:00:00.00').Length - 3)
+        $dur_secs = (New-TimeSpan -Start '01-01-1970' -End $([DateTime]::Parse("01-01-1970 $dur_str"))).TotalSeconds
         $br_str = $durbr_str.Substring($durbr_str.IndexOf('bitrate: ') + [String]('bitrate: ').Length)
         $fps_str =($stream_str | Select-String ', ([0-9.]+) (?:fps|tbr),').Matches[0].Groups[1].Value
         $fps = [Double]$fps_str
@@ -275,10 +276,10 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
         { $params = get_ffmpeg_params_q @pars }
         else
         {
-            $use_full_parse = ($file.Length -lt 30mb) -or ($ext -imatch '^\.avi$')
+            $use_full_parse = ($file.Length -lt 20mb -and $fps -lt 50.0) -or ($dur_secs -lt 60.0) -or ($ext -imatch '^\.avi$')
             $params = if ($use_full_parse) {get_ffmpeg_params @pars} else {get_ffmpeg_params_q @pars}
         }
-        write("[$(Get-Date -Format $TimeFormat)] Generating preview for '$src_short'...")
+        write("[$(Get-Date -Format $TimeFormat)] [$(if ($use_full_parse) {'FULL'} else {'FAST'})] Processing '$src_short'...")
         #write($params)
         if ([IO.Directory]::Exists($destdir) -ne $true)
         {
