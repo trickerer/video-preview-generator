@@ -22,18 +22,23 @@ $MYFFPROBE = $RUN_FFPROBE
 $MYFFMPEG = $RUN_FFMPEG
 
 #consts
-$SEEK_MODE_AUTO = 0
-$SEEK_MODE_FULL = 1
-$SEEK_MODE_FAST = 2
 $PREVIEW_W_MIN = 640
 $PREVIEW_W_MAX = 1920
 $TILE_W_MIN = 3
 $TILE_W_MAX = 5
 $TILE_H_MIN = 2
 $TILE_H_MAX = 4
+$SEEK_MODE_AUTO = 0
+$SEEK_MODE_FULL = 1
+$SEEK_MODE_FAST = 2
+$SEEK_MODE_NAMES = @{
+    $SEEK_MODE_AUTO.ToString()='auto'
+    $SEEK_MODE_FULL.ToString()='full'
+    $SEEK_MODE_FAST.ToString()='fast'
+}
 
-$PREVIEW_EXT = '.jpg'
 $FPI_DEFAULT = 45
+$PREVIEW_EXT = '.jpg'
 $PAT0 = '^[01][0-9]{3}$'
 $PAT1 = '^[0-9]{1,2}[a-z]{1,4}$'
 
@@ -67,7 +72,9 @@ function get_ffmpeg_params_q{ Param ([IO.FileInfo]$basefile, [String]$dest_filen
     $ty4 = $ty3 + $dtpadsize + 1
     $tx = [Math]::Floor($dtfsize2 * 0.75)
 
-    $fil="scale=w=$fwidth`:h=-1,drawtext=fontsize=$dtfsize1`:fontfile=$DT_FONT`:x=0:y=h-lh-lh/2:fontcolor=white:text='%{pts\:hms\}'" +
+    $fil=#"select='eq(n\,0)'," +
+         "scale=w=$fwidth`:h=-1," +
+         "drawtext=fontsize=$dtfsize1`:fontfile=$DT_FONT`:x=0:y=h-lh-lh/2:fontcolor=white:text='%{pts\:hms\}'" +
          ":alpha=$DRAWTEXT_ALPHA`:borderw=2:bordercolor=0x000000A0"
     $fils = ""
     for ($i = 0; $i -lt $tilew * $tileh; ++$i) {
@@ -179,7 +186,7 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
     $ext = $file.Extension
     $size = $file.Length
     $filesize = "$([Math]::Round($size / 1mb, 2)) MB ($($size.ToString("N0")) bytes)"
-    if ($ext -match '^\.(?:mp4|webm)$')
+    if ($ext -imatch '^\.(?:avi|mp4|webm|wmv)$')
     {
         $file_name_short = ($file.BaseName -replace '^(?<fname>(?:.._)?(?=[0-9]+)[^_]+)_.+?$', '${fname}') + $ext
         $src_short = $file.FullName.Substring($file.FullName.IndexOf($path_info.Name)) -replace '\\', '/'
@@ -203,7 +210,7 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
         $ffp_params.Add('-show_streams') > $null
         $ffp_params.Add('-select_streams') > $null
         $ffp_params.Add('v:0') > $null
-        if ($ext -eq '.webm')
+        if ($ext -imatch '^\.(?:webm|wmv)$')
         { $ffp_params.Add('-count_packets') > $null }
         $ffp_params.Add('-i') > $null
         $ffp_params.Add($file.FullName) > $null
@@ -226,7 +233,7 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
         } while ($stream_str -eq $null -and $i -ge 0)
         $dur_str = $durbr_str.Substring([String]('  Duration: ').Length, [String]('00:00:00.00').Length - 3)
         $br_str = $durbr_str.Substring($durbr_str.IndexOf('bitrate: ') + [String]('bitrate: ').Length)
-        $fps_str =($stream_str | Select-String ', ([0-9.]+) fps,').Matches[0].Groups[1].Value
+        $fps_str =($stream_str | Select-String ', ([0-9.]+) (?:fps|tbr),').Matches[0].Groups[1].Value
         $fps = [Double]$fps_str
         $width = if ($w_str -match '^\d+$') {[Int]($w_str)} elseif ($cw_str -match '^\d+$') {[Int]($cw_str)} else {0}
         $height = if ($h_str -match '^\d+$') {[Int]($h_str)} elseif ($ch_str -match '^\d+$') {[Int]($ch_str)} else {0}
@@ -263,10 +270,14 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
             fps = $fps_str
         }
         if ($seek_mode -eq $SEEK_MODE_FULL)
-        { $params = get_ffmpeg_params @pars}
+        { $params = get_ffmpeg_params @pars }
         elseif ($seek_mode -eq $SEEK_MODE_FAST)
-        { $params = get_ffmpeg_params_q @pars}
-        else { $params = if ($file.Length -lt 30mb) {get_ffmpeg_params @pars} else {get_ffmpeg_params_q @pars} }
+        { $params = get_ffmpeg_params_q @pars }
+        else
+        {
+            $use_full_parse = ($file.Length -lt 30mb) -or ($ext -imatch '^\.avi$')
+            $params = if ($use_full_parse) {get_ffmpeg_params @pars} else {get_ffmpeg_params_q @pars}
+        }
         write("[$(Get-Date -Format $TimeFormat)] Generating preview for '$src_short'...")
         #write($params)
         if ([IO.Directory]::Exists($destdir) -ne $true)
@@ -400,7 +411,7 @@ while ($true)
             return
         }
         $seek_mode = [Int]($str2)
-        write("[CFG] using seek mode: $(if ($seek_mode -eq 1) {'FULL'} elseif ($seek_mode -eq 2) {'FAST'} else {'AUTO'})")
+        write("[CFG] using seek mode: $($SEEK_MODE_NAMES[$seek_mode.ToString()].ToUpper())")
         $sleep_time = [Math]::Max($sleep_time, 1)
     }
     elseif ($str -eq '--tiles-horizontal' -or $str -eq '-x')
