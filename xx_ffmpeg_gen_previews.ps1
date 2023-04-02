@@ -34,7 +34,7 @@ $SEEK_MODE_FAST = 2
 $SEEK_MODE_NAMES = @{
     $SEEK_MODE_AUTO.ToString()='auto'
     $SEEK_MODE_FULL.ToString()='full'
-    $SEEK_MODE_FAST.ToString()='fast'
+    $SEEK_MODE_FAST.ToString()='seek'
 }
 
 $FPI_DEFAULT = 45
@@ -229,12 +229,12 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
         $stream_str = $null
         $i = $output.Length-1;
         do {
-            $stream_str = ($output[$i--].ToString().Split("`n") -match '^  Stream .+Video: .+$')[0]
+            $stream_str = ($output[$i--].ToString().Split("`n") -match '^.*[0-9.]+ (?:fps|tbr).*$')[0]
         } while ($stream_str -eq $null -and $i -ge 0)
         $dur_str = $durbr_str.Substring([String]('  Duration: ').Length, [String]('00:00:00.00').Length - 3)
         $dur_secs = (New-TimeSpan -Start '01-01-1970' -End $([DateTime]::Parse("01-01-1970 $dur_str"))).TotalSeconds
         $br_str = $durbr_str.Substring($durbr_str.IndexOf('bitrate: ') + [String]('bitrate: ').Length)
-        $fps_str =($stream_str | Select-String ', ([0-9.]+) (?:fps|tbr),').Matches[0].Groups[1].Value
+        $fps_str =($stream_str | Select-String '([0-9.]+) (?:fps|tbr)').Matches[0].Groups[1].Value
         $fps = [Double]$fps_str
         $width = if ($w_str -match '^\d+$') {[Int]($w_str)} elseif ($cw_str -match '^\d+$') {[Int]($cw_str)} else {0}
         $height = if ($h_str -match '^\d+$') {[Int]($h_str)} elseif ($ch_str -match '^\d+$') {[Int]($ch_str)} else {0}
@@ -279,7 +279,7 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
             $use_full_parse = ($file.Length -lt 20mb -and $fps -lt 50.0) -or ($dur_secs -lt 60.0) -or ($ext -imatch '^\.avi$')
             $params = if ($use_full_parse) {get_ffmpeg_params @pars} else {get_ffmpeg_params_q @pars}
         }
-        write("[$(Get-Date -Format $TimeFormat)] [$(if ($use_full_parse) {'FULL'} else {'FAST'})] Processing '$src_short'...")
+        write("[$(Get-Date -Format $TimeFormat)] [$(if ($use_full_parse) {'FULL'} else {'SEEK'})] Processing '$src_short'...")
         #write($params)
         if ([IO.Directory]::Exists($destdir) -ne $true)
         {
@@ -336,7 +336,7 @@ function print_help{
           "    --threads INT           `tSet decode threads parameter. Default is 'auto'`n" +
           "    --width, -w INT         `tSet preview width, $PREVIEW_W_MIN to $PREVIEW_W_MAX. Default is '$WIDTH_DEFAULT'`n" +
           "    --force-mode, -m {$SEEK_MODE_AUTO,$SEEK_MODE_FULL,$SEEK_MODE_FAST}" +
-           "`tForce seek mode: $SEEK_MODE_AUTO='auto' (default), $SEEK_MODE_FULL='full', $SEEK_MODE_FAST='fast'`n" +
+           "`tForce seek mode: $SEEK_MODE_AUTO='auto' (default), $SEEK_MODE_FULL='full', $SEEK_MODE_FAST='seek'`n" +
           "    --tiles-horizontal, -x  `tSet horizontal tiles number, $TILE_W_MIN to $TILE_W_MAX. Default is '$tilew'`n" +
           "    --tiles-vertical, -y    `tSet vertical tiles number, $TILE_H_MIN to $TILE_H_MAX. Default is '$tileh'`n")
 }
