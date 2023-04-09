@@ -271,9 +271,9 @@ function process_file{ Param ([IO.FileInfo]$file, [String]$destdir)
             fps = $fps_str
         }
         if ($seek_mode -eq $SEEK_MODE_FULL)
-        { $params = get_ffmpeg_params @pars }
+        { $params = get_ffmpeg_params @pars; $use_full_parse = $true }
         elseif ($seek_mode -eq $SEEK_MODE_FAST)
-        { $params = get_ffmpeg_params_q @pars }
+        { $params = get_ffmpeg_params_q @pars; $use_full_parse = $false }
         else
         {
             $use_full_parse = ($file.Length -lt 20mb -and $fps -lt 50.0) -or ($dur_secs -lt 60.0) -or ($ext -imatch '^\.avi$')
